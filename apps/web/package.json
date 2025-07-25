@@ -1,0 +1,43 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.1.1",
+    "@repo/schema": "workspace:*",
+    "@repo/tailwind-config": "workspace:*",
+    "@tailwindcss/postcss": "^4.0.8",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@workspace/ui": "workspace:*",
+    "axios": "^1.10.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.475.0",
+    "next": "^15.2.3",
+    "next-auth": "^4.24.11",
+    "next-themes": "^0.4.4",
+    "postcss": "^8.5.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-hook-form": "^7.61.0",
+    "tailwindcss": "^4.1.11",
+    "zod": "^4.0.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@workspace/eslint-config": "workspace:^",
+    "typescript": "^5.7.3"
+  }
+}
