@@ -12,7 +12,7 @@ import bcrypt from "bcrypt";
 import authMiddleware from "./middleware";
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: ["http://localhost:3000", "http://localhost:8080"] }));
+app.use(cors({ origin: ["http://localhost:3000","http://localhost:3001", "http://localhost:8080"] }));
 
 app.post("/signup", async (req: Request, res: Response) => {
   console.log(req.body)
