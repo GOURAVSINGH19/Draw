@@ -11,6 +11,7 @@ const Canva = ({ roomId, socket }: {
     const canvaref = useRef<HTMLCanvasElement>(null);
     const [canva, setcanva] = useState<Draw>();
     const [selectedTool, setSelectedTool] = useState<Tool>("rect")
+    const [Canvasize, setCanvasSize] = useState({ width: 0, height: 0 })
     useEffect(() => {
         canva?.setTool(selectedTool);
     }, [selectedTool, canva]);
@@ -24,9 +25,22 @@ const Canva = ({ roomId, socket }: {
             }
         }
     }, [canvaref])
+
+    useEffect(() => {
+        const updateCanvasSize = (): any => {
+            setCanvasSize({
+                width: window.innerWidth,
+                height: window.innerHeight,
+            });
+        };
+
+        updateCanvasSize();
+        window.addEventListener("resize", updateCanvasSize);
+        return () => window.removeEventListener("resize", updateCanvasSize);
+    }, []);
     return (
         <div className="overflow-hidden h-full">
-            <canvas ref={canvaref} width={window.innerWidth} height={window.innerHeight}></canvas>
+            <canvas ref={canvaref} width={Canvasize.width} height={Canvasize.height}></canvas>
             <Topbar setSelectedTool={setSelectedTool} />
         </div>
     )

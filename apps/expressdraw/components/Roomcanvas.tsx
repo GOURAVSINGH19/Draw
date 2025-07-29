@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import Canva from "./Canvas"
 const RoomCanvas = ({ roomId }: { roomId: string }) => {
     const [socket, setSocket] = useState<WebSocket>();
-    const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyYjI2MWM1Mi0xNmU4LTQ0NTMtOTQ0Yi04OTRkYzUzNDY5MWMiLCJpYXQiOjE3NTM2MDUyMTcsImV4cCI6MTc1MzY5MTYxN30.HIuvIDaPsdsNVbrzb2AGIAPcDMtF3JnSL0fuZBaUoaM";
+    const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyYjI2MWM1Mi0xNmU4LTQ0NTMtOTQ0Yi04OTRkYzUzNDY5MWMiLCJpYXQiOjE3NTM3ODQ1MTAsImV4cCI6MTc1Mzg3MDkxMH0.Qjzev7zVJwszT3aP6bD0ABQzDYuToJiQp7vphjyTtjY";
     useEffect(() => {
         const ws = new WebSocket(`ws://localhost:8080?token=${token}`)
 
