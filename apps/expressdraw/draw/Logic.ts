@@ -19,8 +19,6 @@ type Shape =
       type: "pencil";
       startX: number;
       startY: number;
-      endX: number;
-      endY: number;
     }
   | {
       type: "line";
@@ -68,7 +66,7 @@ export class Draw {
     this.init();
     this.initHandlers();
     this.initMouseHandlers();
-    this.draw();
+    // this.draw();
   }
 
   destroy() {
@@ -79,43 +77,47 @@ export class Draw {
     this.canvas.removeEventListener("mousemove", this.mouseMoveHandler);
   }
 
-  setTool(tool: "circle" | "pencil" | "rect" | "line" | "move") {
+  setTool(tool: "circle" | "pencil" | "rect" | "move" | "line" | "zoom") {
     this.selectedTool = tool;
   }
 
-  draw = () => {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.save();
-    this.ctx.translate(this.offsetX, this.offsetY);
-    this.ctx.scale(this.scale, this.scale);
-    this.drawGrid();
-    this.ctx.restore();
-  };
+  // draw = () => {
+  //   this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  //   this.ctx.save();
+  //   this.ctx.translate(this.offsetX, this.offsetY);
+  //   this.ctx.scale(this.scale, this.scale);
+  //   this.drawGrid();
+  //   this.ctx.restore();
+  // };
 
-  drawGrid() {
-    const step = 10;
-    const rangex = this.canvas.width;
-    const rangey = this.canvas.height;
+  // drawGrid() {
+  //   const step = 10;
+  //   const rangex = window.innerWidth;
+  //   const rangey = window.innerHeight;
 
-    this.ctx.strokeStyle = "#121212";
+  //   this.ctx.strokeStyle = "#121212";
 
-    for (let x = -rangex; x <= rangex; x += step) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, -rangey);
-      this.ctx.lineTo(x, rangey);
-      this.ctx.stroke();
-    }
+  //   for (let x = -rangex; x <= rangex; x += step) {
+  //     this.ctx.beginPath();
+  //     this.ctx.moveTo(x, -rangey);
+  //     this.ctx.lineTo(x, rangey);
+  //     this.ctx.stroke();
+  //   }
 
-    for (let y = -rangey; y <= rangey; y += step) {
-      this.ctx.beginPath();
-      this.ctx.moveTo(-rangex, y);
-      this.ctx.lineTo(rangex, y);
-      this.ctx.stroke();
-    }
-  }
+  //   for (let y = -rangey; y <= rangey; y += step) {
+  //     this.ctx.beginPath();
+  //     this.ctx.moveTo(-rangex, y);
+  //     this.ctx.lineTo(rangex, y);
+  //     this.ctx.stroke();
+  //   }
+  // }
 
-  endDrag() {
-    this.isDragging = false;
+  drag(e: any) {
+    if (this.selectedTool === "zoom") return;
+    e.preventDefault();
+    this.offsetX -= e.deltaX;
+    this.offsetY -= e.deltaY;
+    this.clearCanvas();
   }
 
   async init() {
@@ -143,7 +145,7 @@ export class Draw {
     this.ctx.save();
     this.ctx.translate(this.offsetX, this.offsetY);
     this.ctx.scale(this.scale, this.scale);
-    this.drawGrid();
+    // this.drawGrid();
 
     this.existingShapes.map((shape) => {
       if (shape.type === "rect") {
@@ -162,8 +164,8 @@ export class Draw {
         this.ctx.closePath();
       } else if (shape.type === "line") {
         this.ctx.strokeStyle = "rgba(255, 255, 255)";
-        console.log("Drawing line:", shape);
         this.ctx.beginPath();
+        this.ctx.lineWidth = 1;
         this.ctx.moveTo(shape.startX, shape.startY);
         this.ctx.lineTo(shape.endX, shape.endY);
         this.ctx.stroke();
@@ -181,8 +183,33 @@ export class Draw {
     return { x, y };
   }
 
+  zoom(e: WheelEvent) {
+    if (this.selectedTool !== "zoom") return;
+
+    e.preventDefault();
+    const zoomIntensity = 0.1;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left - this.offsetX) / this.scale;
+    const mouseY = (e.clientY - rect.top - this.offsetY) / this.scale;
+
+    const oldScale = this.scale;
+
+    if (e.deltaY < 0) {
+      this.scale *= 1 + zoomIntensity;
+    } else {
+      this.scale *= 1 - zoomIntensity;
+    }
+
+    this.scale = Math.max(0.1, Math.min(10, this.scale));
+
+    this.offsetX -= mouseX * (this.scale - oldScale);
+    this.offsetY -= mouseY * (this.scale - oldScale);
+
+    this.clearCanvas();
+  }
+
   mouseDownHandler = (e: MouseEvent) => {
-    this.isDragging = true;
     this.clicked = true;
 
     const { x, y } = this.getMousePos(e);
@@ -191,9 +218,6 @@ export class Draw {
   };
 
   mouseUpHandler = (e: MouseEvent) => {
-    this.isDragging = false;
-    if (this.isPanning) return;
-
     this.clicked = false;
     const { x: endX, y: endY } = this.getMousePos(e);
     const width = endX - this.startX;
@@ -227,8 +251,6 @@ export class Draw {
         endY: endY,
       };
     }
-
-    console.log("Shape to be added:", shape);
     if (!shape) return;
     this.existingShapes.push(shape);
 
@@ -244,26 +266,18 @@ export class Draw {
   };
 
   mouseMoveHandler = (e: MouseEvent) => {
-    if (!this.isDragging) return;
-
-    if (this.isPanning) {
-      this.offsetX += e.clientX - this.startX;
-      this.offsetY += e.clientY - this.startY;
-      this.clearCanvas();
-      return;
-    }
-
     const { x: currentX, y: currentY } = this.getMousePos(e);
     const width = Math.abs(currentX - this.startX);
     const height = Math.abs(currentY - this.startY);
-    this.ctx.strokeStyle = "rgba(255, 255, 255)";
     const selectedTool = this.selectedTool;
-    console.log(this.startX, this.startY, currentX, currentY);
+    this.ctx.strokeStyle = "rgba(255, 255, 255)";
+
+    this.clearCanvas();
+
     this.ctx.save();
     this.ctx.translate(this.offsetX, this.offsetY);
     this.ctx.scale(this.scale, this.scale);
 
-    this.ctx.strokeStyle = "rgba(255, 255, 255)";
     if (this.clicked) {
       if (selectedTool === "rect") {
         this.ctx.strokeRect(this.startX, this.startY, width, height);
@@ -277,9 +291,9 @@ export class Draw {
         this.ctx.closePath();
       } else if (selectedTool === "line") {
         this.ctx.beginPath();
+        this.ctx.lineWidth = 1;
         this.ctx.moveTo(this.startX, this.startY);
         this.ctx.lineTo(currentX, currentY);
-        this.ctx.lineWidth = 10;
         this.ctx.stroke();
         this.ctx.closePath();
       }
@@ -291,26 +305,16 @@ export class Draw {
     this.canvas.addEventListener("mousedown", this.mouseDownHandler);
     this.canvas.addEventListener("mouseup", this.mouseUpHandler);
     this.canvas.addEventListener("mousemove", this.mouseMoveHandler);
-    window.addEventListener("keydown", (e) => {
-      if (e.code === "Space") this.isPanning = true;
-    });
-    window.addEventListener("keyup", (e) => {
-      if (e.code === "Space") this.isPanning = false;
-    });
-    this.canvas.addEventListener("touchend", () => this.endDrag());
     this.canvas.addEventListener(
       "wheel",
-      (e: WheelEvent) => {
-        e.preventDefault();
-        this.offsetX -= e.deltaX;
-        this.offsetY -= e.deltaY;
-        this.clearCanvas();
+      (e) => {
+        if (this.selectedTool === "move") {
+          this.drag(e);
+        } else if (this.selectedTool === "zoom") {
+          this.zoom(e);
+        }
       },
       { passive: false }
     );
-    // // Zoom
-    // this.canvas.addEventListener("wheel", (e) => this.zoom(e), {
-    //   passive: false,
-    // });
   }
 }

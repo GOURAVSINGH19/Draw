@@ -1,6 +1,6 @@
 const page = () => {
   return (
-    <div className="w-full h-full bg-[#121212]">
+    <div className="w-full h-full">
       <h1>s</h1>
     </div>
   )
