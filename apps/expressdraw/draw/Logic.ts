@@ -47,7 +47,9 @@ export class Draw {
   public offsetY = 0;
   public scale = 1;
   public isDragging = false;
-  private isPanning = false;
+  private selectedShapeIndex: number | null = null;
+  private dragOffsetX: number | null = null;
+  private dragOffsetY: number | null = null;
   socket: WebSocket;
 
   constructor(canvas: HTMLCanvasElement, roomId: string, socket: WebSocket) {
@@ -209,49 +211,150 @@ export class Draw {
     this.clearCanvas();
   }
 
+  update(x: number, y: number): number | null {
+    for (let i = this.existingShapes.length - 1; i >= 0; i--) {
+      const shape = this.existingShapes[i];
+
+      if (!shape) continue;
+
+      if (shape.type === "rect") {
+        if (
+          x >= shape.x &&
+          x <= shape.x + shape.width &&
+          y >= shape.y &&
+          y <= shape.y + shape.height
+        ) {
+          this.selectedShapeIndex = i;
+          return i;
+        }
+      } else if (shape.type === "circle") {
+        const dx = x - shape.centerX;
+        const dy = y - shape.centerY;
+        if (Math.sqrt(dx * dx + dy * dy) <= shape.radius) {
+          this.selectedShapeIndex = i;
+          return i;
+        }
+      } else if (shape.type === "line") {
+        // Improved hit test for line using point-to-line distance
+        const { startX, startY, endX, endY } = shape;
+        const distanceToSegment = this.getDistanceToSegment(
+          x,
+          y,
+          startX,
+          startY,
+          endX,
+          endY
+        );
+        if (distanceToSegment <= 5) {
+          // 5 pixels tolerance
+          this.selectedShapeIndex = i;
+          return i;
+        }
+      }
+    }
+
+    this.clearCanvas();
+    return null;
+  }
+
+  getDistanceToSegment(
+    px: number,
+    py: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number
+  ): number {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
+
+    const t = Math.max(
+      0,
+      Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy))
+    );
+    const closestX = x1 + t * dx;
+    const closestY = y1 + t * dy;
+    return Math.hypot(px - closestX, py - closestY);
+  }
+
   mouseDownHandler = (e: MouseEvent) => {
     this.clicked = true;
-
     const { x, y } = this.getMousePos(e);
     this.startX = x;
     this.startY = y;
+
+    if (this.selectedTool === "move") {
+      const idx = this.update(x, y);
+      if (idx !== null) {
+        const shape = this.existingShapes[idx];
+        this.selectedShapeIndex = idx;
+
+        if (shape?.type === "rect") {
+          this.dragOffsetX = x - shape.x;
+          this.dragOffsetY = y - shape.y;
+        } else if (shape?.type === "circle") {
+          this.dragOffsetX = x - shape.centerX;
+          this.dragOffsetY = y - shape.centerY;
+        } else if (shape?.type === "line") {
+          this.dragOffsetX = x - shape.startX;
+          this.dragOffsetY = y - shape.startY;
+        }
+
+        this.isDragging = true;
+      }
+    }
   };
 
   mouseUpHandler = (e: MouseEvent) => {
     this.clicked = false;
+
+    if (this.selectedTool === "move") {
+      this.isDragging = false;
+      this.selectedShapeIndex = null;
+      this.ctx.strokeStyle = "rgba(255, 255, 255)";
+      return;
+    }
+
     const { x: endX, y: endY } = this.getMousePos(e);
     const width = endX - this.startX;
     const height = endY - this.startY;
 
-    const selectedTool = this.selectedTool;
     let shape: Shape | null = null;
 
-    if (selectedTool === "rect") {
-      shape = {
-        type: "rect",
-        x: this.startX,
-        y: this.startY,
-        width,
-        height,
-      };
-    } else if (selectedTool === "circle") {
-      const radius = Math.max(width, height) / 2;
-      shape = {
-        type: "circle",
-        radius,
-        centerX: this.startX + radius,
-        centerY: this.startY + radius,
-      };
-    } else if (selectedTool === "line") {
-      shape = {
-        type: "line",
-        startX: this.startX,
-        startY: this.startY,
-        endX: endX,
-        endY: endY,
-      };
+    switch (this.selectedTool) {
+      case "rect":
+        shape = {
+          type: "rect",
+          x: this.startX,
+          y: this.startY,
+          width,
+          height,
+        };
+        break;
+      case "circle":
+        const radius = Math.max(width, height) / 2;
+        shape = {
+          type: "circle",
+          radius,
+          centerX: this.startX + radius,
+          centerY: this.startY + radius,
+        };
+        break;
+      case "line":
+        shape = {
+          type: "line",
+          startX: this.startX,
+          startY: this.startY,
+          endX,
+          endY,
+        };
+        break;
     }
+
     if (!shape) return;
+
     this.existingShapes.push(shape);
 
     this.socket.send(
@@ -267,37 +370,65 @@ export class Draw {
 
   mouseMoveHandler = (e: MouseEvent) => {
     const { x: currentX, y: currentY } = this.getMousePos(e);
-    const width = Math.abs(currentX - this.startX);
-    const height = Math.abs(currentY - this.startY);
-    const selectedTool = this.selectedTool;
-    this.ctx.strokeStyle = "rgba(255, 255, 255)";
 
-    this.clearCanvas();
+    if (
+      this.selectedTool === "move" &&
+      this.isDragging &&
+      this.selectedShapeIndex !== null
+    ) {
+      const shape = this.existingShapes[this.selectedShapeIndex];
+      if (shape?.type === "rect") {
+        shape.x = currentX - (this.dragOffsetX ?? 0);
+        shape.y = currentY - (this.dragOffsetY ?? 0);
+      } else if (shape?.type === "circle") {
+        shape.centerX = currentX - (this.dragOffsetX ?? 0);
+        shape.centerY = currentY - (this.dragOffsetY ?? 0);
+      } else if (shape?.type === "line") {
+        const dx = currentX - (this.dragOffsetX ?? 0) - shape.startX;
+        const dy = currentY - (this.dragOffsetY ?? 0) - shape.startY;
+        shape.startX += dx;
+        shape.startY += dy;
+        shape.endX += dx;
+        shape.endY += dy;
+      }
+
+      this.clearCanvas();
+      return;
+    }
+
+    if (!this.clicked) return;
+
+    const width = currentX - this.startX;
+    const height = currentY - this.startY;
 
     this.ctx.save();
+    this.clearCanvas();
+    this.ctx.strokeStyle = "rgba(255, 255, 255)";
     this.ctx.translate(this.offsetX, this.offsetY);
     this.ctx.scale(this.scale, this.scale);
 
-    if (this.clicked) {
-      if (selectedTool === "rect") {
+    switch (this.selectedTool) {
+      case "rect":
         this.ctx.strokeRect(this.startX, this.startY, width, height);
-      } else if (selectedTool === "circle") {
-        const radius = Math.max(width, height) / 2;
+        break;
+      case "circle":
+        const radius = Math.max(Math.abs(width), Math.abs(height)) / 2;
         const centerX = this.startX + radius;
         const centerY = this.startY + radius;
         this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, Math.abs(radius), 0, Math.PI * 2);
+        this.ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
         this.ctx.stroke();
         this.ctx.closePath();
-      } else if (selectedTool === "line") {
+        break;
+      case "line":
         this.ctx.beginPath();
-        this.ctx.lineWidth = 1;
         this.ctx.moveTo(this.startX, this.startY);
         this.ctx.lineTo(currentX, currentY);
         this.ctx.stroke();
         this.ctx.closePath();
-      }
+        break;
     }
+
     this.ctx.restore();
   };
 

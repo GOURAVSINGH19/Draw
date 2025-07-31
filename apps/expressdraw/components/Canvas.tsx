@@ -40,7 +40,7 @@ const Canva = ({ roomId, socket }: {
         return () => window.removeEventListener("resize", updateCanvasSize);
     }, [canvaref]);
     return (
-        <div className="overflow-hidden h-full">
+        <div className={`overflow-hidden h-full ${selectedTool === "move" ? "cursor-move" : "cursor-pointer"} `}>
             <canvas className="bg-[#121212]" ref={canvaref} width={Canvasize.width} height={Canvasize.height}></canvas>
             <Topbar setSelectedTool={setSelectedTool} selectedTool={selectedTool} />
         </div>
