@@ -1,21 +1,30 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import { Draw } from "../draw/Logic";
-import { Circle, Move, Pencil, Square, ZoomIn } from "lucide-react";
+import { Circle, Eraser, EraserIcon, Move, Pencil, Square, ZoomIn } from "lucide-react";
 
 export type Tool = "rect" | "circle" | "pencil" | "line" | "move" | "zoom";
-
+export type Color = "red" | "black" | "white" | "pink"
 const Canva = ({ roomId, socket }: {
     socket: WebSocket,
     roomId: string
 }) => {
     const canvaref = useRef<HTMLCanvasElement>(null);
     const [canva, setcanva] = useState<Draw>();
+    const [eraser, seteraser] = useState();
     const [selectedTool, setSelectedTool] = useState<Tool>("move")
+    const [colors, setColor] = useState<Color>("white");
     const [Canvasize, setCanvasSize] = useState({ width: 0, height: 0 })
     useEffect(() => {
         canva?.setTool(selectedTool);
-    }, [selectedTool, canva]);
+        canva?.setColorTool(colors)
+    }, [selectedTool, colors, canva]);
+    const updateCanvasSize = (): any => {
+        setCanvasSize({
+            width: window.innerWidth,
+            height: window.innerHeight,
+        });
+    };
 
     useEffect(() => {
         if (canvaref.current) {
@@ -23,26 +32,21 @@ const Canva = ({ roomId, socket }: {
             setcanva(g);
             return () => {
                 g.destroy();
-            }
+            };
         }
-    }, [canvaref])
+    }, [canvaref]);
 
     useEffect(() => {
-        const updateCanvasSize = (): any => {
-            setCanvasSize({
-                width: window.innerWidth,
-                height: window.innerHeight,
-            });
-        };
-
         updateCanvasSize();
         window.addEventListener("resize", updateCanvasSize);
         return () => window.removeEventListener("resize", updateCanvasSize);
-    }, [canvaref]);
+    }, [])
+
     return (
-        <div className={`overflow-hidden h-full ${selectedTool === "move" ? "cursor-move" : "cursor-pointer"} `}>
+        <div className={`overflow-hidden h-full  ${selectedTool === "move" ? "cursor-move" : "cursor-pointer"}`}>
             <canvas className="bg-[#121212]" ref={canvaref} width={Canvasize.width} height={Canvasize.height}></canvas>
             <Topbar setSelectedTool={setSelectedTool} selectedTool={selectedTool} />
+            <ColorTool setColor={setColor} />
         </div>
     )
 }
@@ -68,6 +72,25 @@ export function Topbar({ setSelectedTool, selectedTool }: {
             </button>
             <button onClick={() => setSelectedTool("zoom")} className={`cursor-pointer px-2 py-1 ${selectedTool == "zoom" ? "bg-purple-500" : "bg-blend-multiply"} text-white rounded-md border-[2px] border-[#ffff]`}>
                 <ZoomIn className={`w-5 h-5 ${selectedTool === "zoom" ? "text-white" : "text-black"}`} />
+            </button>
+        </div>
+    )
+}
+
+export function ColorTool({ setColor }: { setColor: (s: Color) => void }) {
+    return (
+        <div className="w-fit h-fit flex items-center flex-col absolute top-[40%] left-[2%] bg-[#ffffff38] px-2 py-1 gap-2 rounded-md">
+            <button onClick={() => setColor("pink")} className={`cursor-pointer px-2 py-1  text-white rounded-md`}>
+                <Circle className="w-5 h-5 " fill="pink" />
+            </button>
+            <button onClick={() => setColor("white")} className={`cursor-pointer px-2 py-1  text-white rounded-md`}>
+                <Circle className="w-5 h-5 " fill="white" />
+            </button>
+            <button onClick={() => setColor("black")} className={`cursor-pointer px-2 py-1  text-white rounded-md`}>
+                <Circle className="w-5 h-5 " fill="black" />
+            </button>
+            <button onClick={() => setColor("red")} className={`cursor-pointer px-2 py-1  text-white rounded-md`}>
+                <Circle className="w-5 h-5 " fill="red" />
             </button>
         </div>
     )

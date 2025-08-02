@@ -33,7 +33,6 @@ function checkUser(token: string): string | null {
 
 wss.on("connection", function connection(ws, request) {
   try {
-
     const url = request.url;
     if (!url) {
       return;
@@ -72,6 +71,21 @@ wss.on("connection", function connection(ws, request) {
           return;
         }
         user.rooms = user?.rooms.filter((x) => x === parsedData.room);
+      }
+
+      if (parsedData.type == "delete") {
+        const roomId = parsedData.roomId;
+        const shapeId = parsedData.shapeId;
+        try {
+          await prisma.chat.delete({
+            where: {
+              id: shapeId,
+              roomId,
+            },
+          });
+        } catch (err) {
+          console.log(err);
+        }
       }
 
       if (parsedData.type === "chat") {

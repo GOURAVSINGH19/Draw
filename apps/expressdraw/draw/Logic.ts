@@ -1,39 +1,48 @@
-import { Tool } from "../components/Canvas";
+import { Color, Tool } from "../components/Canvas";
 import { getEistingShapes } from "./http";
 
 type Shape =
-  | {
-      type: "rect";
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    }
-  | {
-      type: "circle";
-      centerX: number;
-      centerY: number;
-      radius: number;
-    }
-  | {
-      type: "pencil";
-      startX: number;
-      startY: number;
-    }
-  | {
-      type: "line";
-      startX: number;
-      startY: number;
-      endX: number;
-      endY: number;
-    }
-  | {
-      type: "move";
-      startX: number;
-      startY: number;
-      endX: number;
-      endY: number;
-    };
+  | ({
+      id: string;
+    } & (
+      | {
+          type: "rect";
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          color: Color;
+        }
+      | {
+          type: "circle";
+          centerX: number;
+          centerY: number;
+          radius: number;
+          color: Color;
+        }
+      | {
+          type: "pencil";
+          startX: number;
+          startY: number;
+          color: Color;
+        }
+      | {
+          type: "line";
+          startX: number;
+          startY: number;
+          endX: number;
+          endY: number;
+          color: Color;
+        }
+      | {
+          type: "move";
+          startX: number;
+          startY: number;
+          endX: number;
+          endY: number;
+        }
+    ))
+
 export class Draw {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -43,6 +52,7 @@ export class Draw {
   private startX = 0;
   private startY = 0;
   private selectedTool: Tool = "circle";
+  private selectColorTool: Color = "white";
   public offsetX = 0;
   public offsetY = 0;
   public scale = 1;
@@ -50,6 +60,7 @@ export class Draw {
   private selectedShapeIndex: number | null = null;
   private dragOffsetX: number | null = null;
   private dragOffsetY: number | null = null;
+  private eraserRadius: number = 0;
   socket: WebSocket;
 
   constructor(canvas: HTMLCanvasElement, roomId: string, socket: WebSocket) {
@@ -79,8 +90,14 @@ export class Draw {
     this.canvas.removeEventListener("mousemove", this.mouseMoveHandler);
   }
 
-  setTool(tool: "circle" | "pencil" | "rect" | "move" | "line" | "zoom") {
+  setTool(
+    tool: "circle" | "pencil" | "rect" | "move" | "line" | "zoom" 
+  ) {
     this.selectedTool = tool;
+  }
+
+  setColorTool(tool: "red" | "black" | "white" | "pink") {
+    this.selectColorTool = tool;
   }
 
   // draw = () => {
@@ -150,8 +167,8 @@ export class Draw {
     // this.drawGrid();
 
     this.existingShapes.map((shape) => {
+      this.ctx.strokeStyle = (shape as any).color || "white";
       if (shape.type === "rect") {
-        this.ctx.strokeStyle = "rgba(255, 255, 255)";
         this.ctx.strokeRect(shape.x, shape.y, shape.width, shape.height);
       } else if (shape.type === "circle") {
         this.ctx.beginPath();
@@ -165,7 +182,6 @@ export class Draw {
         this.ctx.stroke();
         this.ctx.closePath();
       } else if (shape.type === "line") {
-        this.ctx.strokeStyle = "rgba(255, 255, 255)";
         this.ctx.beginPath();
         this.ctx.lineWidth = 1;
         this.ctx.moveTo(shape.startX, shape.startY);
@@ -198,9 +214,9 @@ export class Draw {
     const oldScale = this.scale;
 
     if (e.deltaY < 0) {
-      this.scale *= 1 + zoomIntensity;
+      this.scale *= 1 + zoomIntensity / 2;
     } else {
-      this.scale *= 1 - zoomIntensity;
+      this.scale *= 1 - zoomIntensity / 2;
     }
 
     this.scale = Math.max(0.1, Math.min(10, this.scale));
@@ -235,7 +251,6 @@ export class Draw {
           return i;
         }
       } else if (shape.type === "line") {
-        // Improved hit test for line using point-to-line distance
         const { startX, startY, endX, endY } = shape;
         const distanceToSegment = this.getDistanceToSegment(
           x,
@@ -246,7 +261,6 @@ export class Draw {
           endY
         );
         if (distanceToSegment <= 5) {
-          // 5 pixels tolerance
           this.selectedShapeIndex = i;
           return i;
         }
@@ -279,11 +293,82 @@ export class Draw {
     return Math.hypot(px - closestX, py - closestY);
   }
 
+  private notifyShapeDeleted(id: any) {
+    this.socket.send(
+      JSON.stringify({
+        type: "delete",
+        shapeId: id,
+        roomId: this.roomId,
+      })
+    );
+  }
+
+  Eraser(e: MouseEvent) {
+    const { x, y } = this.getMousePos(e);
+
+    for (let i = this.existingShapes.length - 1; i >= 0; i--) {
+      const shape = this.existingShapes[i];
+      console.log(shape)
+      if (shape?.type === "rect") {
+        if (
+          x + this.eraserRadius >= shape.x &&
+          x - this.eraserRadius <= shape.x + shape.width &&
+          y + this.eraserRadius >= shape.y &&
+          y - this.eraserRadius <= shape.y + shape.height
+        ) {
+          console.log(this.existingShapes);
+          const deletedShape = this.existingShapes.splice(i, 1)[0];
+          console.log(deletedShape.id);
+          const deletedId = deletedShape;
+          console.log(deletedId);
+          this.notifyShapeDeleted(deletedId);
+          this.clearCanvas();
+          return;
+        }
+      } else if (shape?.type === "circle") {
+        const dx = x - shape.centerX;
+        const dy = y - shape.centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance <= shape.radius + this.eraserRadius) {
+          const deletedShape = this.existingShapes.splice(i, 1)[0];
+          if (!deletedShape?.id) {
+            console.log("Deleted shape missing id", deletedShape);
+            return;
+          }
+          this.notifyShapeDeleted(deletedShape.id);
+          this.clearCanvas();
+          return;
+        }
+      } else if (shape?.type === "line") {
+        const { startX, startY, endX, endY } = shape;
+        const distanceToLine = this.getDistanceToSegment(
+          x,
+          y,
+          startX,
+          startY,
+          endX,
+          endY
+        );
+        if (distanceToLine <= this.eraserRadius) {
+          const deletedShape = this.existingShapes.splice(i, 1)[0];
+          this.notifyShapeDeleted(deletedShape.id);
+          this.clearCanvas();
+          return;
+        }
+      }
+    }
+  }
+
   mouseDownHandler = (e: MouseEvent) => {
     this.clicked = true;
     const { x, y } = this.getMousePos(e);
     this.startX = x;
     this.startY = y;
+
+    if (this.selectedTool === "eraser") {
+      this.Eraser(e);
+      return;
+    }
 
     if (this.selectedTool === "move") {
       const idx = this.update(x, y);
@@ -313,7 +398,7 @@ export class Draw {
     if (this.selectedTool === "move") {
       this.isDragging = false;
       this.selectedShapeIndex = null;
-      this.ctx.strokeStyle = "rgba(255, 255, 255)";
+      this.ctx.strokeStyle = this.selectColorTool;
       return;
     }
 
@@ -322,32 +407,40 @@ export class Draw {
     const height = endY - this.startY;
 
     let shape: Shape | null = null;
+    const color = this.selectColorTool;
 
     switch (this.selectedTool) {
       case "rect":
         shape = {
+          id: crypto.randomUUID(),
           type: "rect",
           x: this.startX,
           y: this.startY,
           width,
           height,
+          color,
         };
         break;
       case "circle":
         const radius = Math.max(width, height) / 2;
         shape = {
+          id: crypto.randomUUID(),
           type: "circle",
           radius,
           centerX: this.startX + radius,
           centerY: this.startY + radius,
+          color,
         };
         break;
       case "line":
         shape = {
+          id: crypto.randomUUID(),
+
           type: "line",
           startX: this.startX,
           startY: this.startY,
           endX,
+          color,
           endY,
         };
         break;
@@ -403,7 +496,7 @@ export class Draw {
 
     this.ctx.save();
     this.clearCanvas();
-    this.ctx.strokeStyle = "rgba(255, 255, 255)";
+    this.ctx.strokeStyle = this.selectColorTool;
     this.ctx.translate(this.offsetX, this.offsetY);
     this.ctx.scale(this.scale, this.scale);
 
@@ -422,6 +515,7 @@ export class Draw {
         break;
       case "line":
         this.ctx.beginPath();
+        this.ctx.lineWidth = 1;
         this.ctx.moveTo(this.startX, this.startY);
         this.ctx.lineTo(currentX, currentY);
         this.ctx.stroke();
