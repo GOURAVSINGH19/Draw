@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { Draw } from "../draw/Logic";
 import { Circle, Eraser, EraserIcon, Move, Pencil, Square, ZoomIn } from "lucide-react";
 
-export type Tool = "rect" | "circle" | "pencil" | "line" | "move" | "zoom";
+export type Tool = "rect" | "circle" | "pencil" | "line" | "move" | "zoom" | "eraser";
 export type Color = "red" | "black" | "white" | "pink"
 const Canva = ({ roomId, socket }: {
     socket: WebSocket,
@@ -11,7 +11,6 @@ const Canva = ({ roomId, socket }: {
 }) => {
     const canvaref = useRef<HTMLCanvasElement>(null);
     const [canva, setcanva] = useState<Draw>();
-    const [eraser, seteraser] = useState();
     const [selectedTool, setSelectedTool] = useState<Tool>("move")
     const [colors, setColor] = useState<Color>("white");
     const [Canvasize, setCanvasSize] = useState({ width: 0, height: 0 })
@@ -72,6 +71,9 @@ export function Topbar({ setSelectedTool, selectedTool }: {
             </button>
             <button onClick={() => setSelectedTool("zoom")} className={`cursor-pointer px-2 py-1 ${selectedTool == "zoom" ? "bg-purple-500" : "bg-blend-multiply"} text-white rounded-md border-[2px] border-[#ffff]`}>
                 <ZoomIn className={`w-5 h-5 ${selectedTool === "zoom" ? "text-white" : "text-black"}`} />
+            </button>
+            <button onClick={() => setSelectedTool("eraser")} className={`cursor-pointer px-2 py-1 ${selectedTool == "eraser" ? "bg-purple-500" : "bg-blend-multiply"} text-white rounded-md border-[2px] border-[#ffff]`}>
+                <Eraser className={`w-5 h-5 ${selectedTool === "eraser" ? "text-white" : "text-black"}`} />
             </button>
         </div>
     )

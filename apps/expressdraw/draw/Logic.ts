@@ -1,48 +1,59 @@
 import { Color, Tool } from "../components/Canvas";
 import { getEistingShapes } from "./http";
 
-type Shape =
-  | ({
-      id: string;
-    } & (
-      | {
-          type: "rect";
-          x: number;
-          y: number;
-          width: number;
-          height: number;
-          color: Color;
-        }
-      | {
-          type: "circle";
-          centerX: number;
-          centerY: number;
-          radius: number;
-          color: Color;
-        }
-      | {
-          type: "pencil";
-          startX: number;
-          startY: number;
-          color: Color;
-        }
-      | {
-          type: "line";
-          startX: number;
-          startY: number;
-          endX: number;
-          endY: number;
-          color: Color;
-        }
-      | {
-          type: "move";
-          startX: number;
-          startY: number;
-          endX: number;
-          endY: number;
-        }
-    ))
+type Shape = {
+  id: number;
+} & (
+  | {
+      type: "rect";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      color: Color;
+    }
+  | {
+      type: "circle";
+      centerX: number;
+      centerY: number;
+      radius: number;
+      color: Color;
+    }
+  | {
+      type: "pencil";
+      startX: number;
+      startY: number;
+      color: Color;
+    }
+  | {
+      type: "line";
+      startX: number;
+      startY: number;
+      endX: number;
+      endY: number;
+      color: Color;
+    }
+  | {
+      type: "move";
+      startX: number;
+      startY: number;
+      endX: number;
+      endY: number;
+    }
+);
 
+let idCounter = 1;
+function generateIncrementalId(): number {
+  const random = Math.floor(Math.random() * 100);
+  const id = idCounter * 100 + random;
+  idCounter++;
+
+  if (idCounter > 20000000) {
+    idCounter = 1;
+  }
+
+  return id;
+}
 export class Draw {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -60,7 +71,10 @@ export class Draw {
   private selectedShapeIndex: number | null = null;
   private dragOffsetX: number | null = null;
   private dragOffsetY: number | null = null;
-  private eraserRadius: number = 0;
+  private eraserRadius: number = 10;
+  private eraserCursor: HTMLElement | null = null;
+  private isErasing: boolean = false;
+
   socket: WebSocket;
 
   constructor(canvas: HTMLCanvasElement, roomId: string, socket: WebSocket) {
@@ -79,6 +93,7 @@ export class Draw {
     this.init();
     this.initHandlers();
     this.initMouseHandlers();
+
     // this.draw();
   }
 
@@ -91,13 +106,57 @@ export class Draw {
   }
 
   setTool(
-    tool: "circle" | "pencil" | "rect" | "move" | "line" | "zoom" 
+    tool: "circle" | "pencil" | "rect" | "move" | "line" | "zoom" | "eraser"
   ) {
     this.selectedTool = tool;
+
+    if (tool === "eraser") {
+      this.showEraserCursor();
+    } else {
+      this.hideEraserCursor();
+    }
+  }
+
+  setEraserRadius(radius: number) {
+    this.eraserRadius = radius;
+    this.updateEraserCursor();
   }
 
   setColorTool(tool: "red" | "black" | "white" | "pink") {
     this.selectColorTool = tool;
+  }
+
+  private showEraserCursor() {
+    if (this.eraserCursor) return;
+
+    this.eraserCursor = document.createElement("div");
+    this.eraserCursor.style.cssText = `
+      position: fixed;
+      width: ${this.eraserRadius * 2}px;
+      height: ${this.eraserRadius * 2}px;
+      border: 2px solid #ff6b6b;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 1000;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 107, 107, 0.1);
+    `;
+    document.body.appendChild(this.eraserCursor);
+  }
+
+  private hideEraserCursor() {
+    if (this.eraserCursor) {
+      document.body.removeChild(this.eraserCursor);
+      this.eraserCursor = null;
+    }
+  }
+
+  private updateEraserCursor() {
+    if (this.eraserCursor) {
+      const size = this.eraserRadius * 2 * this.scale;
+      this.eraserCursor.style.width = `${size}px`;
+      this.eraserCursor.style.height = `${size}px`;
+    }
   }
 
   // draw = () => {
@@ -293,7 +352,8 @@ export class Draw {
     return Math.hypot(px - closestX, py - closestY);
   }
 
-  private notifyShapeDeleted(id: any) {
+  private notifyShapeDeleted(id: number) {
+    console.log(id);
     this.socket.send(
       JSON.stringify({
         type: "delete",
@@ -308,55 +368,64 @@ export class Draw {
 
     for (let i = this.existingShapes.length - 1; i >= 0; i--) {
       const shape = this.existingShapes[i];
-      console.log(shape)
-      if (shape?.type === "rect") {
-        if (
-          x + this.eraserRadius >= shape.x &&
-          x - this.eraserRadius <= shape.x + shape.width &&
-          y + this.eraserRadius >= shape.y &&
-          y - this.eraserRadius <= shape.y + shape.height
-        ) {
-          console.log(this.existingShapes);
-          const deletedShape = this.existingShapes.splice(i, 1)[0];
-          console.log(deletedShape.id);
-          const deletedId = deletedShape;
-          console.log(deletedId);
-          this.notifyShapeDeleted(deletedId);
-          this.clearCanvas();
-          return;
-        }
-      } else if (shape?.type === "circle") {
-        const dx = x - shape.centerX;
-        const dy = y - shape.centerY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance <= shape.radius + this.eraserRadius) {
-          const deletedShape = this.existingShapes.splice(i, 1)[0];
-          if (!deletedShape?.id) {
-            console.log("Deleted shape missing id", deletedShape);
-            return;
-          }
-          this.notifyShapeDeleted(deletedShape.id);
-          this.clearCanvas();
-          return;
-        }
-      } else if (shape?.type === "line") {
-        const { startX, startY, endX, endY } = shape;
-        const distanceToLine = this.getDistanceToSegment(
-          x,
-          y,
-          startX,
-          startY,
-          endX,
-          endY
-        );
-        if (distanceToLine <= this.eraserRadius) {
-          const deletedShape = this.existingShapes.splice(i, 1)[0];
-          this.notifyShapeDeleted(deletedShape.id);
-          this.clearCanvas();
-          return;
+      console.log(shape);
+
+      if (!shape) return;
+      let shouldErase = false;
+      switch (shape.type) {
+        case "rect":
+          shouldErase = this.isRectInEraserRange(shape, x, y);
+          break;
+        case "circle":
+          shouldErase = this.isCircleInEraserRange(shape, x, y);
+          break;
+        case "line":
+          shouldErase = this.isLineInEraserRange(shape, x, y);
+          break;
+      }
+
+      if (shouldErase) {
+        const deleteShape = this.existingShapes.splice(i, 1)[0];
+        if (deleteShape?.id) {
+          this.notifyShapeDeleted(deleteShape?.id);
+          shouldErase = true;
         }
       }
+      if (shouldErase) {
+        this.clearCanvas();
+      }
     }
+  }
+
+  private isRectInEraserRange(shape: any, x: number, y: number): boolean {
+    const closestX = Math.max(shape.x, Math.min(x, shape.x + shape.width));
+    const closestY = Math.max(shape.y, Math.min(y, shape.y + shape.height));
+
+    const distanceX = x - closestX;
+    const distanceY = y - closestY;
+    const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+
+    return distanceSquared <= this.eraserRadius * this.eraserRadius;
+  }
+
+  private isCircleInEraserRange(shape: any, x: number, y: number): boolean {
+    const dx = x - shape.centerX;
+    const dy = y - shape.centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    return distance <= shape.radius + this.eraserRadius;
+  }
+
+  private isLineInEraserRange(shape: any, x: number, y: number): boolean {
+    const distanceToLine = this.getDistanceToSegment(
+      x,
+      y,
+      shape.startX,
+      shape.startY,
+      shape.endX,
+      shape.endY
+    );
+
+    return distanceToLine <= this.eraserRadius;
   }
 
   mouseDownHandler = (e: MouseEvent) => {
@@ -366,6 +435,7 @@ export class Draw {
     this.startY = y;
 
     if (this.selectedTool === "eraser") {
+      this.isErasing = true;
       this.Eraser(e);
       return;
     }
@@ -394,6 +464,11 @@ export class Draw {
 
   mouseUpHandler = (e: MouseEvent) => {
     this.clicked = false;
+    this.isErasing = false;
+
+    if (this.selectedTool === "eraser") {
+      return;
+    }
 
     if (this.selectedTool === "move") {
       this.isDragging = false;
@@ -412,7 +487,7 @@ export class Draw {
     switch (this.selectedTool) {
       case "rect":
         shape = {
-          id: crypto.randomUUID(),
+          id: generateIncrementalId(),
           type: "rect",
           x: this.startX,
           y: this.startY,
@@ -424,7 +499,7 @@ export class Draw {
       case "circle":
         const radius = Math.max(width, height) / 2;
         shape = {
-          id: crypto.randomUUID(),
+          id: generateIncrementalId(),
           type: "circle",
           radius,
           centerX: this.startX + radius,
@@ -434,8 +509,7 @@ export class Draw {
         break;
       case "line":
         shape = {
-          id: crypto.randomUUID(),
-
+          id: generateIncrementalId(),
           type: "line",
           startX: this.startX,
           startY: this.startY,
@@ -463,6 +537,14 @@ export class Draw {
 
   mouseMoveHandler = (e: MouseEvent) => {
     const { x: currentX, y: currentY } = this.getMousePos(e);
+
+    if (this.selectedTool === "eraser" && this.eraserCursor) {
+      this.eraserCursor.style.left = `${e.clientX}px`;
+      this.eraserCursor.style.top = `${e.clientY}px`;
+      if (this.isErasing) {
+        this.Eraser(e);
+      }
+    }
 
     if (
       this.selectedTool === "move" &&
@@ -541,5 +623,10 @@ export class Draw {
       },
       { passive: false }
     );
+    this.hideEraserCursor();
+  }
+
+  onEraserSizeChange(size: number) {
+    this.setEraserRadius(size);
   }
 }

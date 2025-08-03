@@ -73,18 +73,60 @@ wss.on("connection", function connection(ws, request) {
         user.rooms = user?.rooms.filter((x) => x === parsedData.room);
       }
 
-      if (parsedData.type == "delete") {
-        const roomId = parsedData.roomId;
-        const shapeId = parsedData.shapeId;
+      if (parsedData.type === "delete") {
+        const roomId = Number(parsedData.roomId);
+        const shapeId = Number(parsedData.shapeId);
+
         try {
-          await prisma.chat.delete({
+          const messages = await prisma.chat.findMany({
             where: {
-              id: shapeId,
-              roomId,
+              roomId: roomId,
             },
           });
+
+          const target = messages.find((msg) => {
+            try {
+              const parsed = JSON.parse(msg.message);
+              return parsed?.shape?.id === shapeId;
+            } catch {
+              return false;
+            }
+          });
+
+          if (!target) {
+            console.log("Shape not found with id:", shapeId);
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                message: "Shape not found",
+                shapeId: shapeId,
+              })
+            );
+            return;
+          }
+          const deletedShape = await prisma.chat.delete({
+            where: {
+              id: target.id,
+            },
+          });
+
+          console.log("Shape deleted successfully:", deletedShape);
+
+          // Optionally broadcast deletion
+          // broadcastToRoom(roomId, {
+          //   type: "shape_deleted",
+          //   shapeId: shapeId,
+          //   roomId: roomId,
+          // });
         } catch (err) {
-          console.log(err);
+          console.error(err);
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              message: "Failed to delete shape",
+              shapeId: shapeId,
+            })
+          );
         }
       }
 
